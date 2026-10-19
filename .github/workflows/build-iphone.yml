@@ -1,0 +1,47 @@
+name: Build HS JAYA iPhone IPA
+
+# No signing credentials are sent to this workflow.
+# A push to this dedicated build branch triggers a build; main stays manual.
+on:
+  workflow_dispatch:
+  push:
+    branches: [codex/iphone-build]
+    paths:
+      - 'HSJaya/**'
+      - 'HSJaya.xcodeproj/**'
+      - 'Tests/**'
+      - 'scripts/build-ipa.sh'
+      - '.github/workflows/build-iphone.yml'
+
+permissions:
+  contents: read
+
+concurrency:
+  group: iphone-build-${{ github.ref }}
+  cancel-in-progress: true
+
+jobs:
+  build:
+    runs-on: macos-15
+    timeout-minutes: 20
+    steps:
+      - name: Check out project
+        uses: actions/checkout@v4
+        with:
+          persist-credentials: false
+      - name: Set up Node for protocol tests
+        uses: actions/setup-node@v4
+        with:
+          node-version: '22'
+      - name: Compile and package unsigned IPA
+        shell: bash
+        run: bash scripts/build-ipa.sh
+      - name: Store IPA for local signing
+        uses: actions/upload-artifact@v4
+        with:
+          name: HS_JAYA_iPhone_UNSIGNED
+          path: |
+            build-iphone/HS_JAYA_iPhone_UNSIGNED.ipa
+            build-iphone/HS_JAYA_iPhone_UNSIGNED.ipa.sha256
+          if-no-files-found: error
+          retention-days: 7
