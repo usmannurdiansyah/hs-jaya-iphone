@@ -1,17 +1,9 @@
 name: Build HS JAYA iPhone IPA
 
-# No signing credentials are sent to this workflow.
-# A push to this dedicated build branch triggers a build; main stays manual.
+# Runs only when the user clicks Actions -> Run workflow.
+# No signing credentials are sent to GitHub.
 on:
   workflow_dispatch:
-  push:
-    branches: [codex/iphone-build]
-    paths:
-      - 'HSJaya/**'
-      - 'HSJaya.xcodeproj/**'
-      - 'Tests/**'
-      - 'scripts/build-ipa.sh'
-      - '.github/workflows/build-iphone.yml'
 
 permissions:
   contents: read
@@ -33,15 +25,34 @@ jobs:
         uses: actions/setup-node@v4
         with:
           node-version: '22'
+      - name: Unpack complete HS JAYA project
+        shell: bash
+        run: |
+          python3 - <<'PY'
+          import pathlib, zipfile
+          archive = pathlib.Path('HS_JAYA_iPhone_Source.zip')
+          assert archive.is_file(), 'Upload HS_JAYA_iPhone_Source.zip to the repository root first'
+          with zipfile.ZipFile(archive) as z:
+              assert z.testzip() is None, 'Source ZIP is damaged'
+              assert sum(i.file_size for i in z.infolist()) < 40 * 1024 * 1024, 'Source ZIP too large'
+              for name in z.namelist():
+                  p = pathlib.PurePosixPath(name)
+                  assert not p.is_absolute() and '..' not in p.parts and '\\' not in name, 'Invalid archive path'
+              z.extractall('source')
+          assert pathlib.Path('source/HSJaya.xcodeproj/project.pbxproj').is_file(), 'Missing Xcode project'
+          assert pathlib.Path('source/HSJaya/Web/index.html').is_file(), 'Missing original interface'
+          print('Complete source project extracted. Original assets are checked by Tests/check.mjs.')
+          PY
       - name: Compile and package unsigned IPA
         shell: bash
+        working-directory: source
         run: bash scripts/build-ipa.sh
       - name: Store IPA for local signing
         uses: actions/upload-artifact@v4
         with:
           name: HS_JAYA_iPhone_UNSIGNED
           path: |
-            build-iphone/HS_JAYA_iPhone_UNSIGNED.ipa
-            build-iphone/HS_JAYA_iPhone_UNSIGNED.ipa.sha256
+            source/build-iphone/HS_JAYA_iPhone_UNSIGNED.ipa
+            source/build-iphone/HS_JAYA_iPhone_UNSIGNED.ipa.sha256
           if-no-files-found: error
           retention-days: 7
